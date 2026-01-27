@@ -1,6 +1,6 @@
 
 CFLAGS = -std=c11 -Wall -Wextra -Wno-unused -Wno-unused-parameter
-
+CC = ~/ndk/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
 ifdef ANDROID
 	CFLAGS += -DANDROID
 endif

@@ -1146,7 +1146,7 @@ void tlsf_free(tlsf_t tlsf, void *ptr)
     }
 }
 
-static void *memcpy(void *dst, const void *src, size_t n)
+void* memcpy(void* dst, const void* src, size_t n)
 {
     const char *p = src;
     char *q = dst;
