@@ -20,6 +20,6 @@ kptools: ${objs}
 
 .PHONY: clean
 clean:
-	rm -rf preset.h
+#	rm -rf preset.h
 	rm -rf kptools
 	find . -name "*.o" | xargs rm -f

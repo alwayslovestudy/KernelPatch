@@ -100,7 +100,7 @@ static inline uint32_t sc_k_ver(const char *key)
 static inline long sc_kp_buildtime(const char *key, char *out_buildtime, int outlen)
 {
     if (!key || !key[0]) return -EINVAL;
-    long ret = syscall(__NR_supercall, key, ver_and_cmd(key, SUPERCALL_BUILD_TIME, out_buildtime, outlen));
+    long ret = syscall(__NR_supercall, key, ver_and_cmd(key, SUPERCALL_BUILD_TIME), out_buildtime, outlen);
     return (uint32_t)ret;
 }
 

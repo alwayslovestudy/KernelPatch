@@ -33,6 +33,19 @@ enum
 };
 
 #ifdef ANDROID
+
+#define REPLACE_RC_FILE "/dev/user_init.rc"
+
+#define ADB_FLODER "/data/adb/"
+#define AP_DIR "/data/adb/ap/"
+#define DEV_LOG_DIR "/dev/user_init_log/"
+#define AP_BIN_DIR AP_DIR "bin/"
+#define AP_LOG_DIR AP_DIR "log/"
+#define AP_MAGISKPOLICY_PATH AP_BIN_DIR "magiskpolicy"
+#define MAGISK_SCTX "u:r:magisk:s0"
+#define USER_INIT_SH_PATH "/dev/user_init.sh"
+#define ADB_DIR "/data/adb/"
+
 #define DEFAULT_SHELL "/system/bin/sh"
 #define DEFAULT_PATH "/product/bin:/apex/com.android.runtime/bin:/system/bin:/odm/bin:/vendor/bin:/usr/bin"
 #define DEFAULT_ROOT_PATH \
@@ -124,8 +137,8 @@ static void set_identity(uid_t uid, gid_t *gids, int gids_num)
     if (setresuid(uid, uid, uid)) error(EXIT_CANCELED, errno, "cannot set uids");
 }
 
-static void __attribute__((noreturn))
-run_shell(char const *shell, char const *command, char **additional_args, size_t n_additional_args)
+static void __attribute__((noreturn)) run_shell(char const *shell, char const *command, char **additional_args,
+                                                size_t n_additional_args)
 {
     size_t n_args = 1 + 2 * !!command + n_additional_args + 1;
     char const **args = malloc(n_args * sizeof *args);
