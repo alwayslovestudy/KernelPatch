@@ -7,6 +7,8 @@
 #include <linux/string.h>
 #include <kputils.h>
 #include <asm/current.h>
+#include <hook.h>
+#include <hook_openat.h>
 
 KPM_NAME("kpm-detector-bypass");
 KPM_VERSION("1.0.0");
@@ -17,9 +19,7 @@ KPM_DESCRIPTION("KernelPatch Module Detector Bypass");
 static long detector_bypass_init(const char *args, const char *event, void *__user reserved)
 {
     pr_info("detector_bypass init ..., args: %s\n", args);
-
-    // Implement detector bypass logic here
-
+    hook_openat(FUNCTION_POINTER_CHAIN, "sankuai.meituan");
     return 0;
 }
 
@@ -30,7 +30,8 @@ static long detector_bypass_control0(const char *args, char *__user out_msg, int
 }
 static long detector_bypass_exit(void *__user reserved)
 {
-    pr_info("detector_bypass exit ...\n");
+    pr_info("kpm-detector_bypass exit ...\n");
+    unhook_openat();
     return 0;
 }
 

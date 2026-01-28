@@ -10,13 +10,16 @@ endif
 CC = $(TARGET_COMPILE)gcc
 LD = $(TARGET_COMPILE)ld
 
-CFLAGS = -std=gnu11 -nostdinc -Wall -fno-builtin -mgeneral-regs-only
 
 INCLUDE_DIRS := . include patch/include linux/include linux/arch/arm64/include linux/tools/arch/arm64/include
 
 INCLUDE_FLAGS := $(foreach dir,$(INCLUDE_DIRS),-I$(KP_DIR)/kernel/$(dir))
+INCLUDE_FLAGS += -I.
 
-objs := main.o
+CFLAGS = -std=gnu11 -nostdinc -Wall -fno-builtin -mgeneral-regs-only
+
+SRCS := $(wildcard *.c)
+objs := $(SRCS:.c=.o)
 
 all: detectorbypass.kpm
 
