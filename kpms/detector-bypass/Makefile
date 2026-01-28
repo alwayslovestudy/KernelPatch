@@ -1,5 +1,5 @@
 ifndef TARGET_COMPILE
-    $(error TARGET_COMPILE not set)
+    TARGET_COMPILE:=aarch64-none-elf-
 endif
 
 ifndef KP_DIR
