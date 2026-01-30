@@ -30,9 +30,7 @@ void init_kernel_functions()
     __get_task_comm = (typeof(__get_task_comm))kallsyms_lookup_name("__get_task_comm");
 }
 //需要执行重定向的目标进程名
-char target_process[64] = {
-    0,
-};
+char target_process[64];
 
 //需要重定向的文件
 typedef struct REDIRECT_FILE_T
@@ -51,24 +49,27 @@ struct REDIRECT_FILE_LIST_T redirect_file_list;
 
 static void callback_before_openat(hook_fargs4_t *args, void *udata)
 {
-    //检查当前进程是否为目标进程
-    // if (__get_task_comm) {
-    //     char comm[64] = 
-    //     __get_task_comm(comm, sizeof(comm), current);
-    //     if (!strstr(target_process, comm)) {
-    //         return;
-    //     }
-    // }
-    logkd("target process openat hook called\n");
     args->local.data0 = false;
     args->local.data2 = 0;
+    //检查当前进程是否为目标进程
+    if (__get_task_comm) {
+        char comm[16];
+        memset(comm, 0, sizeof(comm));
+        struct task_struct *task = current;
+        __get_task_comm(comm, sizeof(comm), task);
+        if (!strstr(target_process, comm)) {
+            return;
+        }
+    }
+
     const char __user *filename = (typeof(filename))syscall_argn(args, 1);
     char buf[64];
+    memset(buf, 0, sizeof(buf));
     long rc = compat_strncpy_from_user(buf, filename, sizeof(buf)); //获取打开的文件名
     if (rc <= 0) return;
     logkd("target process openat: %s\n", buf);
     for (int i = 0; i < redirect_file_list.count; i++) {
-        if (!strcmp(buf, redirect_file_list.files[i].ori_filename)) {
+        if (!strncmp(buf, redirect_file_list.files[i].ori_filename, sizeof(buf))) {
             logkd("redirect file: %s -> %s\n", buf, redirect_file_list.files[i].new_filename);
             args->local.data0 = true; //设置重定向标志
             args->local.data1 = i; //保存重定向文件索引
@@ -123,8 +124,8 @@ void redirect_add_path(const char *ori_filename, const char *new_filename)
 {
     if (redirect_file_list.count < sizeof(redirect_file_list.files) / sizeof(REDIRECT_FILE)) {
         REDIRECT_FILE *rf = &redirect_file_list.files[redirect_file_list.count];
-        strncpy(rf->ori_filename, ori_filename, strlen(rf->ori_filename) + 1);
-        strncpy(rf->new_filename, new_filename, strlen(rf->new_filename) + 1);
+        strncpy(rf->ori_filename, ori_filename, strlen(ori_filename) + 1);
+        strncpy(rf->new_filename, new_filename, strlen(new_filename) + 1);
         redirect_file_list.count++;
     }
 }
