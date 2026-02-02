@@ -10,6 +10,8 @@
 #include <hook.h>
 #include <log.h>
 #include <redirect.h>
+#include <kernel_func.h>
+#include <file_filter.h>
 
 KPM_NAME("kpm-detector-bypass");
 KPM_VERSION("1.0.0");
@@ -20,9 +22,12 @@ KPM_DESCRIPTION("KernelPatch Module Detector Bypass");
 static long detector_bypass_init(const char *args, const char *event, void *__user reserved)
 {
     logkd("detector_bypass init ..., args: %s\n", args);
-    redirect_init(".app.huntermini");
-    redirect_add_path("/proc/cpuinfo", "/data/local/tmp/redirect_cpu.txt");
-    redirect_start();
+    init_kernel_functions();
+    file_filter_init(".app.huntermini");
+    file_filter_start();
+    // redirect_init(".app.huntermini");
+    // redirect_add_rule("/proc/cpuinfo", "/data/local/tmp/redirect_cpu.txt");
+    // redirect_start();
     return 0;
 }
 
@@ -33,7 +38,8 @@ static long detector_bypass_control0(const char *args, char *__user out_msg, int
 }
 static long detector_bypass_exit(void *__user reserved)
 {
-    redirect_stop();
+    // redirect_stop();
+    file_filter_stop();
     logkd("kpm-detector_bypass exit ...\n");
     return 0;
 }

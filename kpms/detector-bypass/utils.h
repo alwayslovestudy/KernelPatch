@@ -1,0 +1,1 @@
+bool str_replace_all(char *buf, const char *old_str, const char *new_str);

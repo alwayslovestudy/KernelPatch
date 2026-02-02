@@ -10,25 +10,8 @@
 #include <hook.h>
 #include <log.h>
 #include <hook_openat.h>
+#include <kernel_func.h>
 
-enum pid_type
-{
-    PIDTYPE_PID,
-    PIDTYPE_TGID,
-    PIDTYPE_PGID,
-    PIDTYPE_SID,
-    PIDTYPE_MAX,
-};
-struct pid_namespace;
-//内核函数指针
-pid_t (*__task_pid_nr_ns)(struct task_struct *task, enum pid_type type, struct pid_namespace *ns) = 0;
-char *(*__get_task_comm)(char *to, size_t len, struct task_struct *tsk) = 0;
-
-static void init_kernel_functions()
-{
-    __task_pid_nr_ns = (typeof(__task_pid_nr_ns))kallsyms_lookup_name("__task_pid_nr_ns");
-    __get_task_comm = (typeof(__get_task_comm))kallsyms_lookup_name("__get_task_comm");
-}
 //需要执行重定向的目标进程名
 static char target_process[64];
 
@@ -52,16 +35,16 @@ static void callback_before_openat(hook_fargs4_t *args, void *udata)
     args->local.data0 = false;
     args->local.data2 = 0;
     //检查当前进程是否为目标进程
-    if (__get_task_comm) {
+    KERNEL_FUNCTIONS *kf = get_kernel_functions();
+    if (kf) {
         char comm[16];
         memset(comm, 0, sizeof(comm));
         struct task_struct *task = current;
-        __get_task_comm(comm, sizeof(comm), task);
+        kf->__get_task_comm(comm, sizeof(comm), task);
         if (!strstr(target_process, comm)) {
             return;
         }
     }
-
     const char __user *filename = (typeof(filename))syscall_argn(args, 1);
     char buf[64];
     memset(buf, 0, sizeof(buf));
@@ -114,14 +97,13 @@ void redirect_set_process(const char *proc_name) //设置目标进程名称
 void redirect_init(const char *proc_name)
 {
     redirect_set_process(proc_name);
-    init_kernel_functions();
     hook_openat_init(FUNCTION_POINTER_CHAIN);
     redirect_file_list.count = 0;
     logkd("redirect init success for process: %s\n", target_process);
 }
 
-void redirect_add_path(const char *ori_filename, const char *new_filename)
-{
+void redirect_add_rule(const char *ori_filename, const char *new_filename)
+{   
     if (redirect_file_list.count < sizeof(redirect_file_list.files) / sizeof(REDIRECT_FILE)) {
         REDIRECT_FILE *rf = &redirect_file_list.files[redirect_file_list.count];
         strncpy(rf->ori_filename, ori_filename, strlen(ori_filename) + 1);

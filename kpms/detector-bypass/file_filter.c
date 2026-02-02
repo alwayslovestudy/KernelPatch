@@ -9,115 +9,151 @@
 #include <asm/current.h>
 #include <hook.h>
 #include <log.h>
-#include<hook_read.h>
+#include <hook_read.h>
+#include <hook_openat.h>
+#include <kernel_func.h>
+#include <linux/vmalloc.h>
 
-
-
-//内核函数指针
-char* (*__get_task_comm)(char* to, size_t len, struct task_struct* tsk) = 0;
-
-static void init_kernel_functions()
-{
-    __task_pid_nr_ns = (typeof(__task_pid_nr_ns))kallsyms_lookup_name("__task_pid_nr_ns");
-    __get_task_comm = (typeof(__get_task_comm))kallsyms_lookup_name("__get_task_comm");
-}
 //需要执行重定向的目标进程名
 static char target_process[64];
 
+typedef struct FILTER_RULE_T
+{
+    char ori_data[64];
+    char replace_data[64];
+    char filename[64];
+    int fd;
+} FILTER_RULE;
 
-static void callback_before_read(hook_fargs4_t* args, void* udata)
+typedef struct FILTER_RULE_LIST_T
+{
+    FILTER_RULE rules[64];
+    int count;
+} FILTER_RULE_LIST;
+FILTER_RULE_LIST filter_rules;
+
+static void callback_before_read(hook_fargs4_t *args, void *udata)
 {
     args->local.data0 = false;
-    args->local.data2 = 0;
     //检查当前进程是否为目标进程
-    if (__get_task_comm) {
+    PKERNEL_FUNCTIONS kf = get_kernel_functions();
+    if (kf) {
         char comm[16];
         memset(comm, 0, sizeof(comm));
-        struct task_struct* task = current;
-        __get_task_comm(comm, sizeof(comm), task);
+        struct task_struct *task = current;
+        kf->__get_task_comm(comm, sizeof(comm), task);
         if (!strstr(target_process, comm)) {
             return;
         }
     }
 
-    const char __user* fd = (typeof(fd))syscall_argn(args, 1);
-    char buf[64];
-    memset(buf, 0, sizeof(buf));
-    long rc = compat_strncpy_from_user(buf, filename, sizeof(buf)); //获取打开的文件名
-    if (rc <= 0) return;
-    logkd("target process read: %s\n", buf);
-    for (int i = 0; i < redirect_file_list.count; i++) {
-        if (!strncmp(buf, redirect_file_list.files[i].ori_filename, sizeof(buf))) {
-            logkd("redirect file: %s -> %s\n", buf, redirect_file_list.files[i].new_filename);
-            args->local.data0 = true; //设置重定向标志
-            args->local.data1 = i; //保存重定向文件索引
-            break;
+    const int fd = (typeof(fd))syscall_argn(args, 0);
+    const char __user *buf = (typeof(buf))syscall_argn(args, 1);
+    args->local.data0 = true;
+    args->local.data1 = (uint64_t)fd;
+    args->local.data2 = (uint64_t)buf;
+
+    return;
+}
+
+static void callback_after_read(hook_fargs4_t *args, void *udata)
+{
+    if (args->local.data0) {
+        logkd("file_filter read fd: %llx, buf: %p, ret: %llu\n", args->local.data1, (void *)args->local.data2,
+              args->ret);
+
+        if (args->ret > 0) {
+            size_t read_size = (size_t)args->ret;
+            for (int i = 0; i < filter_rules.count; i++) {
+                if (filter_rules.rules[i].fd == (int)args->local.data1) {
+                    long cplen = 0;
+                    long orilen = strlen(filter_rules.rules[i].ori_data);
+                    long replacelen = strlen(filter_rules.rules[i].replace_data);
+                    char *buf = kmalloc(read_size + 1, GFP_KERNEL);
+                    break;
+                }
+            }
         }
-    }
-    if (!args->local.data0) {
-        return;
-    }
-    int cplen = 0;
-    cplen = compat_copy_to_user((void*)filename, redirect_file_list.files[args->local.data1].new_filename,
-        strlen(redirect_file_list.files[args->local.data1].new_filename) + 1);
-    if (cplen > 0) {
-        args->local.data2 = (uint64_t)args->arg1; //保存原始的文件路径地址
-        logkd("replace file path success in user space");
-    }
-    else { //缓冲区复制失败，尝试使用栈复制
-        void* __user up = copy_to_user_stack(redirect_file_list.files[args->local.data1].new_filename,
-            strlen(redirect_file_list.files[args->local.data1].new_filename) + 1);
-        args->arg1 = (uint64_t)up;
-        logkd("replace file path success in stack");
     }
     return;
 }
 
-static void callback_after_read(hook_fargs4_t* args, void* udata)
+static void callback_before_openat(hook_fargs4_t *args, void *udata)
 {
-    if (args->local.data0 && args->local.data2) {
-        const char* __user origin_path = redirect_file_list.files[args->local.data1].ori_filename;
-        compat_copy_to_user((void*)args->local.data2, origin_path, strlen(origin_path) + 1);
-        logkd("restore redirect file path: %s\n", origin_path);
+    //检查当前进程是否为目标进程
+    KERNEL_FUNCTIONS *kf = get_kernel_functions();
+    if (kf) {
+        char comm[16];
+        memset(comm, 0, sizeof(comm));
+        struct task_struct *task = current;
+        kf->__get_task_comm(comm, sizeof(comm), task);
+        if (!strstr(target_process, comm)) {
+            return;
+        }
+    }
+    const char __user *filename = (typeof(filename))syscall_argn(args, 1);
+    args->local.data0 = (uint64_t)filename; //保存文件路径指针
+}
+
+static void callback_after_openat(hook_fargs4_t *args, void *udata)
+{
+    if (args->ret > 0) {
+        const char __user *filename = (const char __user *)args->local.data0;
+        char buf[64];
+        memset(buf, 0, sizeof(buf));
+        long rc = compat_strncpy_from_user(buf, filename, sizeof(buf)); //获取打开的文件名
+        if (rc <= 0) return;
+        logkd("file_filter openat file: %s, ret fd: %llu\n", buf, args->ret);
+        for (int i = 0; i < filter_rules.count; i++) {
+            if (!strncmp(buf, filter_rules.rules[i].filename, sizeof(buf))) {
+                logkd("file_filter find target file  %s open and fd: %d\n", buf, args->ret);
+                filter_rules.rules[i].fd = (int)args->ret; //保存文件描述符
+                break;
+            }
+        }
+
+    } else {
+        logkd("file_filter openat failed, ret: %llu\n", args->ret);
     }
 }
-void file_filter_set_process(const char* proc_name) //设置目标进程名称
+
+void file_filter_set_process(const char *proc_name) //设置目标进程名称
 {
     if (proc_name) {
         strncpy(target_process, proc_name, strlen(proc_name));
         target_process[strlen(proc_name)] = '\0';
-    }
-    else {
+    } else {
         target_process[0] = '\0';
     }
 }
-void file_filter_init(const char* proc_name)
+void file_filter_init(const char *proc_name)
 {
     file_filter_set_process(proc_name);
-    init_kernel_functions();
     hook_read_init(FUNCTION_POINTER_CHAIN);
-    redirect_file_list.count = 0;
+    hook_openat_init(FUNCTION_POINTER_CHAIN);
     logkd("file_filter init success for process: %s\n", target_process);
 }
 
-void file_filter_add_rule(const char* ori_filename, const char* new_filename)
+void file_filter_add_rule(const char *filename, const char *ori_data, const char *replace_data)
 {
-    if (redirect_file_list.count < sizeof(redirect_file_list.files) / sizeof(REDIRECT_FILE)) {
-        REDIRECT_FILE* rf = &redirect_file_list.files[redirect_file_list.count];
-        strncpy(rf->ori_filename, ori_filename, strlen(ori_filename) + 1);
-        strncpy(rf->new_filename, new_filename, strlen(new_filename) + 1);
-        redirect_file_list.count++;
+    if (filter_rules.count < sizeof(filter_rules.rules) / sizeof(FILTER_RULE)) {
+        FILTER_RULE *fr = &filter_rules.rules[filter_rules.count];
+        strncpy(fr->filename, filename, strlen(filename) + 1);
+        strncpy(fr->ori_data, ori_data, strlen(ori_data) + 1);
+        strncpy(fr->replace_data, replace_data, strlen(replace_data) + 1);
+        fr->fd = -1;
+        filter_rules.count++;
     }
 }
 
 void file_filter_start()
 {
+    hook_openat(callback_before_openat, callback_after_openat);
     hook_read(callback_before_read, callback_after_read);
 }
 
 void file_filter_stop()
 {
     unhook_read(callback_before_read, callback_after_read);
+    unhook_openat(callback_before_openat, callback_after_openat);
 }
-
-
