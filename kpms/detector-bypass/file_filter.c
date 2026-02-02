@@ -13,6 +13,8 @@
 #include <hook_openat.h>
 #include <kernel_func.h>
 #include <linux/vmalloc.h>
+#include <utils.h>
+#
 
 //需要执行重定向的目标进程名
 static char target_process[64];
@@ -58,24 +60,38 @@ static void callback_before_read(hook_fargs4_t *args, void *udata)
 
 static void callback_after_read(hook_fargs4_t *args, void *udata)
 {
-    if (args->local.data0) {
+    if (args->local.data0 && args->ret > 0) {
         logkd("file_filter read fd: %llx, buf: %p, ret: %llu\n", args->local.data1, (void *)args->local.data2,
-              args->ret);
-
-        if (args->ret > 0) {
+            args->ret);
             size_t read_size = (size_t)args->ret;
             for (int i = 0; i < filter_rules.count; i++) {
                 if (filter_rules.rules[i].fd == (int)args->local.data1) {
                     long cplen = 0;
                     long orilen = strlen(filter_rules.rules[i].ori_data);
                     long replacelen = strlen(filter_rules.rules[i].replace_data);
-                    char *buf = kmalloc(read_size + 1, GFP_KERNEL);
+                    char* buf = (char*)vmalloc(read_size + 1);
+                    if (buf)
+                    {
+                        cplen = compat_strncpy_from_user(buf, (const char __user*)args->local.data2, read_size);
+                        if (cplen > 0) {
+                            buf[cplen] = '\0';
+                            char* pos = strstr(buf, filter_rules.rules[i].ori_data);
+                            if (pos) {
+                                logkd("file_filter find ori_data:%s in read buffer, replace it with:%s\n", filter_rules.rules[i].ori_data, filter_rules.rules[i].replace_data);
+                                //替换数据
+                                if (str_replace_all(buf, filter_rules.rules[i].ori_data, filter_rules.rules[i].replace_data)) {
+                                    //将修改后的数据写回用户空间
+                                    compat_copy_to_user((void*)args->local.data2, buf, cplen);
+                                    logkd("file_filter replace success\n");
+                                }
+                            }
+                        }
+                        vfree(buf);
+                    }
                     break;
                 }
             }
-        }
     }
-    return;
 }
 
 static void callback_before_openat(hook_fargs4_t *args, void *udata)

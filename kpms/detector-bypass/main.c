@@ -24,6 +24,7 @@ static long detector_bypass_init(const char *args, const char *event, void *__us
     logkd("detector_bypass init ..., args: %s\n", args);
     init_kernel_functions();
     file_filter_init(".app.huntermini");
+    file_filter_add_rule("/proc/cpuinfo", "Hardware", "HHHHHHHH");
     file_filter_start();
     // redirect_init(".app.huntermini");
     // redirect_add_rule("/proc/cpuinfo", "/data/local/tmp/redirect_cpu.txt");
