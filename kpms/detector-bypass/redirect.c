@@ -35,7 +35,7 @@ static void callback_before_openat(hook_fargs4_t *args, void *udata)
     args->local.data0 = false;
     args->local.data2 = 0;
     //检查当前进程是否为目标进程
-    KERNEL_FUNCTIONS *kf = get_kernel_functions();
+    KERNEL_FUNCTIONS *kf = get_krl_func();
     if (kf) {
         char comm[16];
         memset(comm, 0, sizeof(comm));
@@ -103,7 +103,7 @@ void redirect_init(const char *proc_name)
 }
 
 void redirect_add_rule(const char *ori_filename, const char *new_filename)
-{   
+{
     if (redirect_file_list.count < sizeof(redirect_file_list.files) / sizeof(REDIRECT_FILE)) {
         REDIRECT_FILE *rf = &redirect_file_list.files[redirect_file_list.count];
         strncpy(rf->ori_filename, ori_filename, strlen(ori_filename) + 1);

@@ -24,14 +24,19 @@ struct pid_namespace;
 //内核函数指针定义
 typedef pid_t (*__TASK_PID_NR_NS)(struct task_struct *task, enum pid_type type, struct pid_namespace *ns);
 typedef char *(*__GET_TASK_COMM)(char *to, size_t len, struct task_struct *tsk);
+typedef void *(*VMALLOC)(unsigned long size);
+typedef void (*VFREE)(const void *addr);
 
 typedef struct KERNEL_FUNCTIONS_T
 {
     __TASK_PID_NR_NS __task_pid_nr_ns;
     __GET_TASK_COMM __get_task_comm;
+    VMALLOC vmalloc;
+    VFREE vfree;
+
 } KERNEL_FUNCTIONS, *PKERNEL_FUNCTIONS;
 
 void init_kernel_functions();
-PKERNEL_FUNCTIONS get_kernel_functions();
+PKERNEL_FUNCTIONS get_krl_func();
 
 #endif //_KERNEL_FUNC_H_
