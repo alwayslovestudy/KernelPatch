@@ -46,6 +46,49 @@ typedef struct binder_write_read_t
     binder_uintptr_t read_buffer;
 } binder_write_read;
 
+
+typedef struct binder_transaction_data_t {
+    /* The first two are only used for bcTRANSACTION and brTRANSACTION,
+     * identifying the target and contents of the transaction.
+     */
+    union {
+        /* target descriptor of command transaction */
+        __u32	handle;
+        /* target descriptor of return transaction */
+        binder_uintptr_t ptr;
+    } target;
+    binder_uintptr_t	cookie;	/* target object cookie */
+    __u32		code;		/* transaction command */
+
+    /* General information about the transaction. */
+    __u32	        flags;
+    pid_t		sender_pid;
+    uid_t		sender_euid;
+    binder_size_t	data_size;	/* number of bytes of data */
+    binder_size_t	offsets_size;	/* number of bytes of offsets */
+
+    /* If this transaction is inline, the data immediately
+     * follows here; otherwise, it ends with a pointer to
+     * the data buffer.
+     */
+    union {
+        struct {
+            /* transaction data */
+            binder_uintptr_t	buffer;
+            /* offsets from buffer to flat_binder_object structs */
+            binder_uintptr_t	offsets;
+        } ptr;
+        __u8	buf[8];
+    } data;
+} binder_transaction_data;
+
+typedef struct parcel_binder_transaction_data_t
+{
+    int32_t cmd;
+    binder_transaction_data binder_data;
+} parcel_binder_transaction_data;
+
+
 static FILTER_RULE_LIST filter_rules;
 
 static void callback_before_openat(hook_fargs4_t *args, void *udata)
@@ -155,15 +198,42 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                     }
                 }
 
-                if (k_bwr.write_consumed > 0) {
-                    char *write_buf = get_krl_func()->vmalloc(k_bwr.write_consumed);
+                if (k_bwr.write_size > 0) {
+                    char* write_buf = get_krl_func()->vmalloc(k_bwr.write_size);
                     if (write_buf) {
-                        memset(write_buf, 0, k_bwr.write_consumed + 1);
+                        memset(write_buf, 0, k_bwr.write_size);
                         rc = get_krl_func()->copy_from_user(write_buf, (const char __user *)k_bwr.write_buffer,
-                                                            k_bwr.write_consumed);
+                            k_bwr.write_size);
                         if (rc == 0) {
-                            int bc_cmd = *((int *)write_buf);
-                            logkd("driver_filter ioctl write buffer cmd: %d\n", bc_cmd);
+                            parcel_binder_transaction_data* pbt_data = (parcel_binder_transaction_data*)write_buf;
+                            uint64_t buffer = pbt_data->binder_data.data.ptr.buffer;
+                            uint32_t data_size = pbt_data->binder_data.data_size;
+                            binder_size_t offsize = pbt_data->binder_data.offsets_size;
+                            binder_uintptr_t  offsets = pbt_data->binder_data.data.ptr.offsets;
+                            logkd("driver_filter ioctl write buffer cmd: %d buffer:%llx buf_size:%x offsize:%llx offsets:%llx\n", pbt_data->cmd, buffer, data_size, offsize, offsets);
+                            if (buffer && data_size)
+                            {
+                                int size = sizeof(binder_transaction_data);
+                                char* data_buf = get_krl_func()->vmalloc(data_size);
+                                if (data_buf)
+                                {
+                                    memset(data_buf, 0, data_size);
+                                    rc = get_krl_func()->copy_from_user(data_buf, (const char __user*)buffer, data_size);
+                                    if (rc == 0)
+                                    {
+                                        logkd("driver_filter ioctl data buffer:\n");
+                                        //print hex
+                                        for (int j = 0; j < data_size; j++)
+                                        {
+                                            printk("%02x ", (unsigned char)data_buf[j]);
+                                        }
+                                        printk("\n");
+
+                                    }
+                                    get_krl_func()->vfree(data_buf);
+                                }
+
+                            }
                         }
                         get_krl_func()->vfree(write_buf);
                     }
