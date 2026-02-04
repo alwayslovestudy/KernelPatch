@@ -26,6 +26,7 @@ typedef pid_t (*__TASK_PID_NR_NS)(struct task_struct *task, enum pid_type type, 
 typedef char *(*__GET_TASK_COMM)(char *to, size_t len, struct task_struct *tsk);
 typedef void *(*VMALLOC)(unsigned long size);
 typedef void (*VFREE)(const void *addr);
+typedef unsigned long (*COPY_FROM_USER)(void *to, const void __user *from, unsigned long n);
 
 typedef struct KERNEL_FUNCTIONS_T
 {
@@ -33,10 +34,11 @@ typedef struct KERNEL_FUNCTIONS_T
     __GET_TASK_COMM __get_task_comm;
     VMALLOC vmalloc;
     VFREE vfree;
+    COPY_FROM_USER copy_from_user;
 
 } KERNEL_FUNCTIONS, *PKERNEL_FUNCTIONS;
 
-void init_kernel_functions();
+bool init_kernel_functions();
 PKERNEL_FUNCTIONS get_krl_func();
 
 #endif //_KERNEL_FUNC_H_

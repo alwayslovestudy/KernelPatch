@@ -12,7 +12,7 @@
 #include <redirect.h>
 #include <kernel_func.h>
 #include <file_filter.h>
-#include<driver_filter.h>
+#include <driver_filter.h>
 
 KPM_NAME("kpm-detector-bypass");
 KPM_VERSION("1.0.0");
@@ -22,13 +22,14 @@ KPM_DESCRIPTION("KernelPatch Module Detector Bypass");
 
 static long detector_bypass_init(const char *args, const char *event, void *__user reserved)
 {
-
     logkd("detector_bypass init ..., args: %s\n", args);
-    init_kernel_functions();
+    if (!init_kernel_functions()) {
+        logke("detector_bypass init_kernel_functions failed\n");
+        return -1;
+    }
     driver_filter_init(".app.huntermini");
     driver_filter_add_rule("/dev/binder", " ", " ");
     driver_filter_start();
-
 
     // file_filter_init(".app.huntermini");
     // file_filter_add_rule("/proc/cpuinfo", "Hardware", "HHHHHHHH");

@@ -33,6 +33,19 @@ typedef struct FILTER_RULE_LIST_T
 
 #define BINDER_WRITE_READ 3224396289
 
+typedef __u64 binder_size_t;
+typedef __u64 binder_uintptr_t;
+
+typedef struct binder_write_read_t
+{
+    binder_size_t write_size; /* bytes to write */
+    binder_size_t write_consumed; /* bytes consumed by driver */
+    binder_uintptr_t write_buffer;
+    binder_size_t read_size; /* bytes to read */
+    binder_size_t read_consumed; /* bytes consumed by driver */
+    binder_uintptr_t read_buffer;
+} binder_write_read;
+
 static FILTER_RULE_LIST filter_rules;
 
 static void callback_before_openat(hook_fargs4_t *args, void *udata)
@@ -41,7 +54,7 @@ static void callback_before_openat(hook_fargs4_t *args, void *udata)
     args->local.data0 = false;
     char comm[16];
     memset(comm, 0, sizeof(comm));
-    struct task_struct* task = current;
+    struct task_struct *task = current;
     get_krl_func()->__get_task_comm(comm, sizeof(comm), task);
     if (!strstr(target_process, comm)) {
         return;
@@ -85,15 +98,18 @@ static void callback_before_ioctl(hook_fargs4_t *args, void *udata)
         }
     }
 
-    const int fd = (typeof(fd))syscall_argn(args, 0);
-    const unsigned int cmd = (typeof(cmd))syscall_argn(args, 1);
-    const unsigned long cmd_args = (typeof(cmd))syscall_argn(args, 2);
+    const uint64_t fd = (typeof(fd))syscall_argn(args, 0);
+    const uint64_t cmd = (typeof(cmd))syscall_argn(args, 1);
+    const uint64_t cmd_args = (typeof(cmd_args))syscall_argn(args, 2);
     args->local.data0 = true;
-    args->local.data1 = (uint64_t)fd;
-    args->local.data2 = (uint64_t)cmd;
-    args->local.data3 = (uint64_t)cmd_args;
+    args->local.data1 = fd;
+    args->local.data2 = cmd;
+    args->local.data3 = cmd_args;
+
     return;
 }
+
+
 
 static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
 {
@@ -103,8 +119,56 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
         const unsigned long cmd_args = (unsigned long)args->local.data3;
         logkd("driver_filter ioctl fd: %d, cmd: %u, ret: %llu\n", fd, cmd, args->ret);
         for (int i = 0; i < filter_rules.count; i++) {
-            if (filter_rules.rules[i].fd == fd && cmd == BINDER_WRITE_READ) {  //binder指令为BINDER_WRITE_READ
-                logkd("driver_filter find target driver ioctl:  %s fd: %d, cmd: %u\n", filter_rules.rules[i].drivername, fd, cmd);
+            if (filter_rules.rules[i].fd == fd && cmd == BINDER_WRITE_READ) { //binder指令为BINDER_WRITE_READ
+
+                binder_write_read *__user bwr = (binder_write_read *)cmd_args;
+                logkd("driver_filter find target driver ioctl:  %s fd: %d, cmd: %u args:%llx\n",
+                      filter_rules.rules[i].drivername, fd, cmd, bwr);
+                if (bwr == NULL) {
+                    logke("driver_filter ioctl bwr is NULL\n");
+                    return;
+                }
+                binder_write_read k_bwr;
+                memset(&k_bwr, 0, sizeof(binder_write_read));
+                long rc = get_krl_func()->copy_from_user(&k_bwr, bwr, sizeof(binder_write_read));
+                if (rc != 0) {
+                    logke("driver_filter ioctl copy bwr from user failed, rc: %ld\n", rc);
+                    return;
+                }
+                logkd("driver_filter ioctl  write_size: %llx, read_size: %llx\n", k_bwr.write_size, k_bwr.read_size);
+                logkd("driver_filter ioctl  write_consumed: %llx, read_consumed: %llx\n", k_bwr.write_consumed,
+                      k_bwr.read_consumed);
+                logkd("driver_filter ioctl  write_buffer: 0x%llx, read_buffer: 0x%llx\n", k_bwr.write_buffer,
+                      k_bwr.read_buffer);
+                if (k_bwr.read_consumed > 0) {
+                    char *read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
+                    if (read_buf) {
+                        memset(read_buf, 0, k_bwr.read_consumed);
+                        rc = get_krl_func()->copy_from_user(read_buf, (const char __user *)k_bwr.read_buffer,
+                                                            k_bwr.read_consumed);
+                        if (rc == 0) {
+                            int bp_cmd = *((int *)read_buf);
+                            logkd("driver_filter ioctl read buffer cmd: %d\n", bp_cmd);
+                        }
+
+                        get_krl_func()->vfree(read_buf);
+                    }
+                }
+
+                if (k_bwr.write_consumed > 0) {
+                    char *write_buf = get_krl_func()->vmalloc(k_bwr.write_consumed);
+                    if (write_buf) {
+                        memset(write_buf, 0, k_bwr.write_consumed + 1);
+                        rc = get_krl_func()->copy_from_user(write_buf, (const char __user *)k_bwr.write_buffer,
+                                                            k_bwr.write_consumed);
+                        if (rc == 0) {
+                            int bc_cmd = *((int *)write_buf);
+                            logkd("driver_filter ioctl write buffer cmd: %d\n", bc_cmd);
+                        }
+                        get_krl_func()->vfree(write_buf);
+                    }
+                }
+
                 break;
             }
         }
