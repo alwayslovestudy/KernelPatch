@@ -31,11 +31,12 @@ bool str_replace_all(char *buf, const char *old_str, const char *new_str)
 
 void print_hexdump(const char *data, const size_t size)
 {
+
     char *buf = get_krl_func()->vmalloc(size * 3 + 1); //每个字节2个字符+空格+结束符
     if (buf) {
-        memset(buf, 0, sizeof(buf));
+        memset(buf, 0, size * 3 + 1);
         for (size_t i = 0; i < size; i++) {
-            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%02x ", data[i]);
+            snprintf(buf + strlen(buf), size * 3 + 1 - strlen(buf), "%02x ", data[i]);
         }
         logkd("hexdump: %s\n", buf);
         get_krl_func()->vfree(buf);

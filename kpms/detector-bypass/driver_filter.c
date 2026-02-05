@@ -183,21 +183,7 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                 logkd("driver_filter ioctl  write_consumed: %llx, read_consumed: %llx\n", k_bwr.write_consumed,
                       k_bwr.read_consumed);
                 logkd("driver_filter ioctl  write_buffer: 0x%llx, read_buffer: 0x%llx\n", k_bwr.write_buffer,
-                      k_bwr.read_buffer);
-                // if (k_bwr.read_consumed > 0) {
-                //     char *read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
-                //     if (read_buf) {
-                //         memset(read_buf, 0, k_bwr.read_consumed);
-                //         rc = get_krl_func()->copy_from_user(read_buf, (const char __user *)k_bwr.read_buffer,
-                //                                             k_bwr.read_consumed);
-                //         if (rc == 0) {
-                //             logkd("driver_filter ioctl read buffer:\n");
-                //             print_hexdump(read_buf, k_bwr.read_consumed);
-                //         }
-
-                //         get_krl_func()->vfree(read_buf);
-                //     }
-                // }
+                    k_bwr.read_buffer);
 
                 if (k_bwr.write_size > 0) {
                     char *write_buf = get_krl_func()->vmalloc(k_bwr.write_size);
@@ -243,6 +229,52 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                             }
                         }
                         get_krl_func()->vfree(write_buf);
+                    }
+                }
+
+                if (k_bwr.read_consumed > 0) {
+                    char* read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
+                    if (read_buf) {
+                        memset(read_buf, 0, k_bwr.read_consumed);
+                        rc = get_krl_func()->copy_from_user(read_buf, (const char __user*)k_bwr.read_buffer,
+                            k_bwr.read_consumed);
+                        if (rc == 0) {
+                            parcel_binder_transaction_data* pbt_data = (parcel_binder_transaction_data*)read_buf;
+                            binder_transaction_data* bt_data = &pbt_data->ta_data;
+                            uint32_t handle = bt_data->target.handle;
+                            binder_uintptr_t cookie = bt_data->cookie;
+                            uint32_t code = bt_data->code;
+                            uint32_t flags = bt_data->flags;
+                            pid_t sender_pid = bt_data->sender_pid;
+                            uid_t sender_uid = bt_data->sender_euid;
+                            logkd("driver_filter ioctl read buffer handle:%x cookie:%llx code:%x flags:%x "
+                                "sender_pid:%x sender_uid:%x\n",
+                                handle, cookie, code, flags, sender_pid, sender_uid);
+                            binder_uintptr_t buffer = bt_data->data.ptr.buffer;
+                            binder_size_t data_size = bt_data->data_size;
+                            binder_size_t offsize = bt_data->offsets_size;
+                            binder_uintptr_t offsets = bt_data->data.ptr.offsets;
+                            logkd(
+                                "driver_filter ioctl read buffer  buffer:%llx data_size:%llx offsize:%llx offsets:%llx\n",
+                                buffer, data_size, offsize, offsets);
+                            char* data_buf = get_krl_func()->vmalloc(data_size);
+                            if (data_buf) {
+                                memset(data_buf, 0, data_size);
+                                rc = get_krl_func()->copy_from_user(data_buf, (const void*)buffer, data_size);
+                                if (rc == 0) {
+                                    logkd("driver_filter ioctl data.ptr.buffer:\n");
+                                    //print hex
+                                    print_hexdump(data_buf, data_size);
+                                }
+                                get_krl_func()->vfree(data_buf);
+                            }
+
+
+                            logkd("driver_filter ioctl read buffer:\n");
+                            print_hexdump(read_buf, k_bwr.read_consumed);
+                        }
+
+                        get_krl_func()->vfree(read_buf);
                     }
                 }
 
