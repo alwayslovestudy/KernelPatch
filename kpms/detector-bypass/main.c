@@ -27,7 +27,7 @@ static long detector_bypass_init(const char *args, const char *event, void *__us
         logke("detector_bypass init_kernel_functions failed\n");
         return -1;
     }
-    driver_filter_init(".app.huntermini");
+    driver_filter_init("com.app.bintertest");
     driver_filter_add_rule("/dev/binder", " ", " ");
     driver_filter_start();
 

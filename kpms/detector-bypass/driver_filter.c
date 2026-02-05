@@ -32,6 +32,7 @@ typedef struct FILTER_RULE_LIST_T
 } FILTER_RULE_LIST;
 
 #define BINDER_WRITE_READ 3224396289
+#define BC_TRANSACTION 1077961472
 
 typedef __u64 binder_size_t;
 typedef __u64 binder_uintptr_t;
@@ -46,48 +47,50 @@ typedef struct binder_write_read_t
     binder_uintptr_t read_buffer;
 } binder_write_read;
 
-
-typedef struct binder_transaction_data_t {
+typedef struct binder_transaction_data_t
+{
     /* The first two are only used for bcTRANSACTION and brTRANSACTION,
      * identifying the target and contents of the transaction.
      */
-    union {
+    union
+    {
         /* target descriptor of command transaction */
-        __u32	handle;
+        __u32 handle;
         /* target descriptor of return transaction */
         binder_uintptr_t ptr;
     } target;
-    binder_uintptr_t	cookie;	/* target object cookie */
-    __u32		code;		/* transaction command */
+    binder_uintptr_t cookie; /* target object cookie */
+    __u32 code; /* transaction command */
 
     /* General information about the transaction. */
-    __u32	        flags;
-    pid_t		sender_pid;
-    uid_t		sender_euid;
-    binder_size_t	data_size;	/* number of bytes of data */
-    binder_size_t	offsets_size;	/* number of bytes of offsets */
+    __u32 flags;
+    pid_t sender_pid;
+    uid_t sender_euid;
+    binder_size_t data_size; /* number of bytes of data */
+    binder_size_t offsets_size; /* number of bytes of offsets */
 
     /* If this transaction is inline, the data immediately
      * follows here; otherwise, it ends with a pointer to
      * the data buffer.
      */
-    union {
-        struct {
+    union
+    {
+        struct
+        {
             /* transaction data */
-            binder_uintptr_t	buffer;
+            binder_uintptr_t buffer;
             /* offsets from buffer to flat_binder_object structs */
-            binder_uintptr_t	offsets;
+            binder_uintptr_t offsets;
         } ptr;
-        __u8	buf[8];
+        __u8 buf[8];
     } data;
 } binder_transaction_data;
 
 typedef struct parcel_binder_transaction_data_t
 {
     int32_t cmd;
-    binder_transaction_data binder_data;
-} parcel_binder_transaction_data;
-
+    binder_transaction_data ta_data;
+} __packed parcel_binder_transaction_data; //__packed attribute to prevent structure padding issues
 
 static FILTER_RULE_LIST filter_rules;
 
@@ -152,21 +155,19 @@ static void callback_before_ioctl(hook_fargs4_t *args, void *udata)
     return;
 }
 
-
-
 static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
 {
     if (args->local.data0) {
         const int fd = (int)args->local.data1;
         const unsigned int cmd = (unsigned int)args->local.data2;
         const unsigned long cmd_args = (unsigned long)args->local.data3;
-        logkd("driver_filter ioctl fd: %d, cmd: %u, ret: %llu\n", fd, cmd, args->ret);
+        //logkd("driver_filter ioctl fd: %d, cmd: %u, ret: %llu\n", fd, cmd, args->ret);
         for (int i = 0; i < filter_rules.count; i++) {
             if (filter_rules.rules[i].fd == fd && cmd == BINDER_WRITE_READ) { //binder指令为BINDER_WRITE_READ
 
                 binder_write_read *__user bwr = (binder_write_read *)cmd_args;
-                logkd("driver_filter find target driver ioctl:  %s fd: %d, cmd: %u args:%llx\n",
-                      filter_rules.rules[i].drivername, fd, cmd, bwr);
+                logkd("driver_filter find target driver ioctl:  %s fd: %d, cmd: BINDER_WRITE_READ args:%llx\n",
+                      filter_rules.rules[i].drivername, fd, bwr);
                 if (bwr == NULL) {
                     logke("driver_filter ioctl bwr is NULL\n");
                     return;
@@ -183,56 +184,62 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                       k_bwr.read_consumed);
                 logkd("driver_filter ioctl  write_buffer: 0x%llx, read_buffer: 0x%llx\n", k_bwr.write_buffer,
                       k_bwr.read_buffer);
-                if (k_bwr.read_consumed > 0) {
-                    char *read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
-                    if (read_buf) {
-                        memset(read_buf, 0, k_bwr.read_consumed);
-                        rc = get_krl_func()->copy_from_user(read_buf, (const char __user *)k_bwr.read_buffer,
-                                                            k_bwr.read_consumed);
-                        if (rc == 0) {
-                            int bp_cmd = *((int *)read_buf);
-                            logkd("driver_filter ioctl read buffer cmd: %d\n", bp_cmd);
-                        }
+                // if (k_bwr.read_consumed > 0) {
+                //     char *read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
+                //     if (read_buf) {
+                //         memset(read_buf, 0, k_bwr.read_consumed);
+                //         rc = get_krl_func()->copy_from_user(read_buf, (const char __user *)k_bwr.read_buffer,
+                //                                             k_bwr.read_consumed);
+                //         if (rc == 0) {
+                //             logkd("driver_filter ioctl read buffer:\n");
+                //             print_hexdump(read_buf, k_bwr.read_consumed);
+                //         }
 
-                        get_krl_func()->vfree(read_buf);
-                    }
-                }
+                //         get_krl_func()->vfree(read_buf);
+                //     }
+                // }
 
                 if (k_bwr.write_size > 0) {
-                    char* write_buf = get_krl_func()->vmalloc(k_bwr.write_size);
+                    char *write_buf = get_krl_func()->vmalloc(k_bwr.write_size);
                     if (write_buf) {
                         memset(write_buf, 0, k_bwr.write_size);
                         rc = get_krl_func()->copy_from_user(write_buf, (const char __user *)k_bwr.write_buffer,
-                            k_bwr.write_size);
+                                                            k_bwr.write_size);
                         if (rc == 0) {
-                            parcel_binder_transaction_data* pbt_data = (parcel_binder_transaction_data*)write_buf;
-                            uint64_t buffer = pbt_data->binder_data.data.ptr.buffer;
-                            uint32_t data_size = pbt_data->binder_data.data_size;
-                            binder_size_t offsize = pbt_data->binder_data.offsets_size;
-                            binder_uintptr_t  offsets = pbt_data->binder_data.data.ptr.offsets;
-                            logkd("driver_filter ioctl write buffer cmd: %d buffer:%llx buf_size:%x offsize:%llx offsets:%llx\n", pbt_data->cmd, buffer, data_size, offsize, offsets);
-                            if (buffer && data_size)
-                            {
-                                int size = sizeof(binder_transaction_data);
-                                char* data_buf = get_krl_func()->vmalloc(data_size);
-                                if (data_buf)
-                                {
-                                    memset(data_buf, 0, data_size);
-                                    rc = get_krl_func()->copy_from_user(data_buf, (const char __user*)buffer, data_size);
-                                    if (rc == 0)
-                                    {
-                                        logkd("driver_filter ioctl data buffer:\n");
-                                        //print hex
-                                        for (int j = 0; j < data_size; j++)
-                                        {
-                                            printk("%02x ", (unsigned char)data_buf[j]);
-                                        }
-                                        printk("\n");
-
-                                    }
-                                    get_krl_func()->vfree(data_buf);
+                            parcel_binder_transaction_data *pbt_data = (parcel_binder_transaction_data *)write_buf;
+                            if (pbt_data->cmd != BC_TRANSACTION) {
+                                logkd("driver_filter ioctl write buffer cmd: %x is not BC_TRANSACTION\n",
+                                      pbt_data->cmd);
+                                get_krl_func()->vfree(write_buf);
+                                break;
+                            }
+                            binder_transaction_data *bt_data = &pbt_data->ta_data;
+                            uint32_t handle = bt_data->target.handle;
+                            binder_uintptr_t cookie = bt_data->cookie;
+                            uint32_t code = bt_data->code;
+                            uint32_t flags = bt_data->flags;
+                            pid_t sender_pid = bt_data->sender_pid;
+                            uid_t sender_uid = bt_data->sender_euid;
+                            logkd("driver_filter ioctl write buffer handle:%x cookie:%llx code:%x flags:%x "
+                                  "sender_pid:%x sender_uid:%x\n",
+                                  handle, cookie, code, flags, sender_pid, sender_uid);
+                            binder_uintptr_t buffer = bt_data->data.ptr.buffer;
+                            binder_size_t data_size = bt_data->data_size;
+                            binder_size_t offsize = bt_data->offsets_size;
+                            binder_uintptr_t offsets = bt_data->data.ptr.offsets;
+                            logkd(
+                                "driver_filter ioctl write buffer  buffer:%llx data_size:%llx offsize:%llx offsets:%llx\n",
+                                buffer, data_size, offsize, offsets);
+                            char *data_buf = get_krl_func()->vmalloc(data_size);
+                            if (data_buf) {
+                                memset(data_buf, 0, data_size);
+                                rc = get_krl_func()->copy_from_user(data_buf, (const void *)buffer, data_size);
+                                if (rc == 0) {
+                                    logkd("driver_filter ioctl data.ptr.buffer:\n");
+                                    //print hex
+                                    print_hexdump(data_buf, data_size);
                                 }
-
+                                get_krl_func()->vfree(data_buf);
                             }
                         }
                         get_krl_func()->vfree(write_buf);
