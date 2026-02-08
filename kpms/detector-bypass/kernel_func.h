@@ -28,6 +28,16 @@ typedef void *(*VMALLOC)(unsigned long size);
 typedef void (*VFREE)(const void *addr);
 typedef unsigned long (*COPY_FROM_USER)(void *to, const void __user *from, unsigned long n);
 
+
+typedef void (*PRINT_HEX_DUMP)(const char* level,
+    const char* prefix_str,
+    int prefix_type,
+    int rowsize,
+    int groupsize,
+    const void* buf,
+    size_t len,
+    bool ascii);
+
 typedef struct KERNEL_FUNCTIONS_T
 {
     __TASK_PID_NR_NS __task_pid_nr_ns;
@@ -35,6 +45,7 @@ typedef struct KERNEL_FUNCTIONS_T
     VMALLOC vmalloc;
     VFREE vfree;
     COPY_FROM_USER copy_from_user;
+    PRINT_HEX_DUMP print_hex_dump;
 
 } KERNEL_FUNCTIONS, *PKERNEL_FUNCTIONS;
 

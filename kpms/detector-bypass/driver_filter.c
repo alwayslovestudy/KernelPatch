@@ -14,6 +14,7 @@
 #include <hook_openat.h>
 #include <kernel_func.h>
 #include <utils.h>
+#include <binder_def.h>
 
 //需要执行重定向的目标进程名
 static char target_process[64];
@@ -31,66 +32,6 @@ typedef struct FILTER_RULE_LIST_T
     int count;
 } FILTER_RULE_LIST;
 
-#define BINDER_WRITE_READ 3224396289
-#define BC_TRANSACTION 1077961472
-
-typedef __u64 binder_size_t;
-typedef __u64 binder_uintptr_t;
-
-typedef struct binder_write_read_t
-{
-    binder_size_t write_size; /* bytes to write */
-    binder_size_t write_consumed; /* bytes consumed by driver */
-    binder_uintptr_t write_buffer;
-    binder_size_t read_size; /* bytes to read */
-    binder_size_t read_consumed; /* bytes consumed by driver */
-    binder_uintptr_t read_buffer;
-} binder_write_read;
-
-typedef struct binder_transaction_data_t
-{
-    /* The first two are only used for bcTRANSACTION and brTRANSACTION,
-     * identifying the target and contents of the transaction.
-     */
-    union
-    {
-        /* target descriptor of command transaction */
-        __u32 handle;
-        /* target descriptor of return transaction */
-        binder_uintptr_t ptr;
-    } target;
-    binder_uintptr_t cookie; /* target object cookie */
-    __u32 code; /* transaction command */
-
-    /* General information about the transaction. */
-    __u32 flags;
-    pid_t sender_pid;
-    uid_t sender_euid;
-    binder_size_t data_size; /* number of bytes of data */
-    binder_size_t offsets_size; /* number of bytes of offsets */
-
-    /* If this transaction is inline, the data immediately
-     * follows here; otherwise, it ends with a pointer to
-     * the data buffer.
-     */
-    union
-    {
-        struct
-        {
-            /* transaction data */
-            binder_uintptr_t buffer;
-            /* offsets from buffer to flat_binder_object structs */
-            binder_uintptr_t offsets;
-        } ptr;
-        __u8 buf[8];
-    } data;
-} binder_transaction_data;
-
-typedef struct parcel_binder_transaction_data_t
-{
-    int32_t cmd;
-    binder_transaction_data ta_data;
-} __packed parcel_binder_transaction_data; //__packed attribute to prevent structure padding issues
 
 static FILTER_RULE_LIST filter_rules;
 
@@ -239,39 +180,55 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                         rc = get_krl_func()->copy_from_user(read_buf, (const char __user*)k_bwr.read_buffer,
                             k_bwr.read_consumed);
                         if (rc == 0) {
-                            parcel_binder_transaction_data* pbt_data = (parcel_binder_transaction_data*)read_buf;
-                            binder_transaction_data* bt_data = &pbt_data->ta_data;
-                            uint32_t handle = bt_data->target.handle;
-                            binder_uintptr_t cookie = bt_data->cookie;
-                            uint32_t code = bt_data->code;
-                            uint32_t flags = bt_data->flags;
-                            pid_t sender_pid = bt_data->sender_pid;
-                            uid_t sender_uid = bt_data->sender_euid;
-                            logkd("driver_filter ioctl read buffer handle:%x cookie:%llx code:%x flags:%x "
-                                "sender_pid:%x sender_uid:%x\n",
-                                handle, cookie, code, flags, sender_pid, sender_uid);
-                            binder_uintptr_t buffer = bt_data->data.ptr.buffer;
-                            binder_size_t data_size = bt_data->data_size;
-                            binder_size_t offsize = bt_data->offsets_size;
-                            binder_uintptr_t offsets = bt_data->data.ptr.offsets;
-                            logkd(
-                                "driver_filter ioctl read buffer  buffer:%llx data_size:%llx offsize:%llx offsets:%llx\n",
-                                buffer, data_size, offsize, offsets);
-                            char* data_buf = get_krl_func()->vmalloc(data_size);
-                            if (data_buf) {
-                                memset(data_buf, 0, data_size);
-                                rc = get_krl_func()->copy_from_user(data_buf, (const void*)buffer, data_size);
-                                if (rc == 0) {
-                                    logkd("driver_filter ioctl data.ptr.buffer:\n");
-                                    //print hex
-                                    print_hexdump(data_buf, data_size);
+                            int buf_count = 0;
+                            int cmd = 0;
+                            while (buf_count < k_bwr.read_consumed)
+                            {
+                                cmd = *((int*)(read_buf + buf_count));
+                                if (cmd == BR_REPLY)
+                                    break;
+                                else
+                                    buf_count += 4;
+
+                            }
+                            if (buf_count < k_bwr.read_consumed && cmd == BR_REPLY)
+                            {
+                                parcel_binder_transaction_data* pbt_data = (parcel_binder_transaction_data*)(read_buf + buf_count);
+                                binder_transaction_data* bt_data = &pbt_data->ta_data;
+                                uint32_t handle = bt_data->target.handle;
+                                binder_uintptr_t cookie = bt_data->cookie;
+                                uint32_t code = bt_data->code;
+                                uint32_t flags = bt_data->flags;
+                                pid_t sender_pid = bt_data->sender_pid;
+                                uid_t sender_uid = bt_data->sender_euid;
+                                logkd("driver_filter ioctl read buffer handle:0x%x cookie:0x%llx code:0x%x flags:0x%x "
+                                    "sender_pid:0x%x sender_uid:0x%x\n",
+                                    handle, cookie, code, flags, sender_pid, sender_uid);
+                                binder_uintptr_t buffer = bt_data->data.ptr.buffer;
+                                binder_size_t data_size = bt_data->data_size;
+                                binder_size_t offsize = bt_data->offsets_size;
+                                binder_uintptr_t offsets = bt_data->data.ptr.offsets;
+                                logkd(
+                                    "driver_filter ioctl read buffer  buffer:0x%llx data_size:0x%llx offsize:0x%llx offsets:0x%llx\n",
+                                    buffer, data_size, offsize, offsets);
+                                char* data_buf = get_krl_func()->vmalloc(data_size);
+                                if (data_buf) {
+                                    memset(data_buf, 0, data_size);
+                                    rc = get_krl_func()->copy_from_user(data_buf, (const void*)buffer, data_size);
+                                    if (rc == 0) {
+                                        logkd("driver_filter ioctl data.ptr.buffer:\n");
+                                        //print hex
+                                        print_hexdump(data_buf, data_size);
+                                    }
+                                    get_krl_func()->vfree(data_buf);
                                 }
-                                get_krl_func()->vfree(data_buf);
+
+                                logkd("driver_filter ioctl read buffer:\n");
+                                print_hexdump(read_buf, k_bwr.read_consumed);
+
                             }
 
 
-                            logkd("driver_filter ioctl read buffer:\n");
-                            print_hexdump(read_buf, k_bwr.read_consumed);
                         }
 
                         get_krl_func()->vfree(read_buf);

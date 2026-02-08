@@ -2,6 +2,12 @@
 #include <linux/kernel.h>
 #include <log.h>
 #include <kernel_func.h>
+
+#define DUMP_PREFIX_NONE    0
+#define DUMP_PREFIX_ADDRESS 1
+#define DUMP_PREFIX_OFFSET  2
+
+
 bool str_replace_all(char *buf, const char *old_str, const char *new_str)
 {
     size_t old_len = strlen(old_str);
@@ -32,13 +38,12 @@ bool str_replace_all(char *buf, const char *old_str, const char *new_str)
 void print_hexdump(const char *data, const size_t size)
 {
 
-    char *buf = get_krl_func()->vmalloc(size * 3 + 1); //每个字节2个字符+空格+结束符
-    if (buf) {
-        memset(buf, 0, size * 3 + 1);
-        for (size_t i = 0; i < size; i++) {
-            snprintf(buf + strlen(buf), size * 3 + 1 - strlen(buf), "%02x ", data[i]);
-        }
-        logkd("hexdump: %s\n", buf);
-        get_krl_func()->vfree(buf);
-    }
+    get_krl_func()->print_hex_dump(KERN_INFO,
+        "KP hexdump: ",
+        DUMP_PREFIX_OFFSET,
+        16,
+        1,
+        data,
+        size,
+        false);
 }

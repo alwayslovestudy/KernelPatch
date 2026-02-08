@@ -13,6 +13,13 @@ bool init_kernel_functions()
         logke("init_kernel_functions: __arch_copy_from_user is NULL\n");
         return false;
     }
+
+    kernel_funcs.print_hex_dump = (PRINT_HEX_DUMP)kallsyms_lookup_name("print_hex_dump");
+    if (kernel_funcs.print_hex_dump == NULL) {
+        logke("init_kernel_functions: print_hex_dump is NULL\n");
+        return false;
+    }
+
     return true;
 }
 
