@@ -32,7 +32,6 @@ typedef struct FILTER_RULE_LIST_T
     int count;
 } FILTER_RULE_LIST;
 
-
 static FILTER_RULE_LIST filter_rules;
 
 static void callback_before_openat(hook_fargs4_t *args, void *udata)
@@ -107,7 +106,7 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
             if (filter_rules.rules[i].fd == fd && cmd == BINDER_WRITE_READ) { //binder指令为BINDER_WRITE_READ
 
                 binder_write_read *__user bwr = (binder_write_read *)cmd_args;
-                logkd("driver_filter find target driver ioctl:  %s fd: %d, cmd: BINDER_WRITE_READ args:%llx\n",
+                logkd("driver_filter find target driver ioctl:  %s fd: %d, cmd: BINDER_WRITE_READ args:0x%llx\n",
                       filter_rules.rules[i].drivername, fd, bwr);
                 if (bwr == NULL) {
                     logke("driver_filter ioctl bwr is NULL\n");
@@ -120,11 +119,12 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                     logke("driver_filter ioctl copy bwr from user failed, rc: %ld\n", rc);
                     return;
                 }
-                logkd("driver_filter ioctl  write_size: %llx, read_size: %llx\n", k_bwr.write_size, k_bwr.read_size);
-                logkd("driver_filter ioctl  write_consumed: %llx, read_consumed: %llx\n", k_bwr.write_consumed,
+                logkd("driver_filter ioctl  write_size: 0x%llx, read_size: 0x%llx\n", k_bwr.write_size,
+                      k_bwr.read_size);
+                logkd("driver_filter ioctl  write_consumed: 0x%llx, read_consumed: 0x%llx\n", k_bwr.write_consumed,
                       k_bwr.read_consumed);
                 logkd("driver_filter ioctl  write_buffer: 0x%llx, read_buffer: 0x%llx\n", k_bwr.write_buffer,
-                    k_bwr.read_buffer);
+                      k_bwr.read_buffer);
 
                 if (k_bwr.write_size > 0) {
                     char *write_buf = get_krl_func()->vmalloc(k_bwr.write_size);
@@ -133,68 +133,65 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                         rc = get_krl_func()->copy_from_user(write_buf, (const char __user *)k_bwr.write_buffer,
                                                             k_bwr.write_size);
                         if (rc == 0) {
-                            parcel_binder_transaction_data *pbt_data = (parcel_binder_transaction_data *)write_buf;
-                            if (pbt_data->cmd != BC_TRANSACTION) {
-                                logkd("driver_filter ioctl write buffer cmd: %x is not BC_TRANSACTION\n",
-                                      pbt_data->cmd);
-                                get_krl_func()->vfree(write_buf);
-                                break;
-                            }
-                            binder_transaction_data *bt_data = &pbt_data->ta_data;
-                            uint32_t handle = bt_data->target.handle;
-                            binder_uintptr_t cookie = bt_data->cookie;
-                            uint32_t code = bt_data->code;
-                            uint32_t flags = bt_data->flags;
-                            pid_t sender_pid = bt_data->sender_pid;
-                            uid_t sender_uid = bt_data->sender_euid;
-                            logkd("driver_filter ioctl write buffer handle:%x cookie:%llx code:%x flags:%x "
-                                  "sender_pid:%x sender_uid:%x\n",
-                                  handle, cookie, code, flags, sender_pid, sender_uid);
-                            binder_uintptr_t buffer = bt_data->data.ptr.buffer;
-                            binder_size_t data_size = bt_data->data_size;
-                            binder_size_t offsize = bt_data->offsets_size;
-                            binder_uintptr_t offsets = bt_data->data.ptr.offsets;
-                            logkd(
-                                "driver_filter ioctl write buffer  buffer:%llx data_size:%llx offsize:%llx offsets:%llx\n",
-                                buffer, data_size, offsize, offsets);
-                            char *data_buf = get_krl_func()->vmalloc(data_size);
-                            if (data_buf) {
-                                memset(data_buf, 0, data_size);
-                                rc = get_krl_func()->copy_from_user(data_buf, (const void *)buffer, data_size);
-                                if (rc == 0) {
-                                    logkd("driver_filter ioctl data.ptr.buffer:\n");
-                                    //print hex
-                                    print_hexdump(data_buf, data_size);
+                            int cmd = *((int *)(write_buf));
+                            if (cmd != BC_TRANSACTION) {
+                                logkd("driver_filter ioctl write buffer cmd: 0x%x is not BC_TRANSACTION\n", cmd);
+                                print_hexdump(write_buf, k_bwr.write_size);
+
+                            } else {
+                                binder_transaction_data *bt_data = (binder_transaction_data *)(write_buf + 4);
+                                uint32_t handle = bt_data->target.handle;
+                                binder_uintptr_t cookie = bt_data->cookie;
+                                uint32_t code = bt_data->code;
+                                uint32_t flags = bt_data->flags;
+                                pid_t sender_pid = bt_data->sender_pid;
+                                uid_t sender_uid = bt_data->sender_euid;
+                                logkd("driver_filter ioctl write buffer handle:0x%x cookie:0x%llx code:0x%x flags:0x%x "
+                                      "sender_pid:0x%x sender_uid:0x%x\n",
+                                      handle, cookie, code, flags, sender_pid, sender_uid);
+                                binder_uintptr_t buffer = bt_data->data.ptr.buffer;
+                                binder_size_t data_size = bt_data->data_size;
+                                binder_size_t offsize = bt_data->offsets_size;
+                                binder_uintptr_t offsets = bt_data->data.ptr.offsets;
+                                logkd(
+                                    "driver_filter ioctl write buffer  buffer:0x%llx data_size:0x%llx offsize:0x%llx offsets:0x%llx\n",
+                                    buffer, data_size, offsize, offsets);
+                                char *data_buf = get_krl_func()->vmalloc(data_size);
+                                if (data_buf) {
+                                    memset(data_buf, 0, data_size);
+                                    rc = get_krl_func()->copy_from_user(data_buf, (const void *)buffer, data_size);
+                                    if (rc == 0) {
+                                        logkd("driver_filter ioctl write data.ptr.buffer:\n");
+                                        //print hex
+                                        //print_hexdump(data_buf, data_size);
+                                    }
+                                    get_krl_func()->vfree(data_buf);
                                 }
-                                get_krl_func()->vfree(data_buf);
                             }
+                            get_krl_func()->vfree(write_buf);
                         }
-                        get_krl_func()->vfree(write_buf);
                     }
                 }
 
                 if (k_bwr.read_consumed > 0) {
-                    char* read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
+                    char *read_buf = get_krl_func()->vmalloc(k_bwr.read_consumed);
                     if (read_buf) {
                         memset(read_buf, 0, k_bwr.read_consumed);
-                        rc = get_krl_func()->copy_from_user(read_buf, (const char __user*)k_bwr.read_buffer,
-                            k_bwr.read_consumed);
+                        rc = get_krl_func()->copy_from_user(read_buf, (const char __user *)k_bwr.read_buffer,
+                                                            k_bwr.read_consumed);
                         if (rc == 0) {
                             int buf_count = 0;
                             int cmd = 0;
-                            while (buf_count < k_bwr.read_consumed)
-                            {
-                                cmd = *((int*)(read_buf + buf_count));
+                            while (buf_count < k_bwr.read_consumed) {
+                                cmd = *((int *)(read_buf + buf_count));
                                 if (cmd == BR_REPLY)
                                     break;
                                 else
                                     buf_count += 4;
-
                             }
-                            if (buf_count < k_bwr.read_consumed && cmd == BR_REPLY)
-                            {
-                                parcel_binder_transaction_data* pbt_data = (parcel_binder_transaction_data*)(read_buf + buf_count);
-                                binder_transaction_data* bt_data = &pbt_data->ta_data;
+                            if (buf_count < k_bwr.read_consumed && cmd == BR_REPLY) {
+                                binder_transaction_data *bt_data =
+                                    (binder_transaction_data *)(read_buf + buf_count + 4);
                                 uint32_t handle = bt_data->target.handle;
                                 binder_uintptr_t cookie = bt_data->cookie;
                                 uint32_t code = bt_data->code;
@@ -202,8 +199,8 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                                 pid_t sender_pid = bt_data->sender_pid;
                                 uid_t sender_uid = bt_data->sender_euid;
                                 logkd("driver_filter ioctl read buffer handle:0x%x cookie:0x%llx code:0x%x flags:0x%x "
-                                    "sender_pid:0x%x sender_uid:0x%x\n",
-                                    handle, cookie, code, flags, sender_pid, sender_uid);
+                                      "sender_pid:0x%x sender_uid:0x%x\n",
+                                      handle, cookie, code, flags, sender_pid, sender_uid);
                                 binder_uintptr_t buffer = bt_data->data.ptr.buffer;
                                 binder_size_t data_size = bt_data->data_size;
                                 binder_size_t offsize = bt_data->offsets_size;
@@ -211,26 +208,37 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                                 logkd(
                                     "driver_filter ioctl read buffer  buffer:0x%llx data_size:0x%llx offsize:0x%llx offsets:0x%llx\n",
                                     buffer, data_size, offsize, offsets);
-                                char* data_buf = get_krl_func()->vmalloc(data_size);
+                                char *data_buf = get_krl_func()->vmalloc(data_size);
                                 if (data_buf) {
                                     memset(data_buf, 0, data_size);
-                                    rc = get_krl_func()->copy_from_user(data_buf, (const void*)buffer, data_size);
+                                    rc = get_krl_func()->copy_from_user(data_buf, (const void *)buffer, data_size);
                                     if (rc == 0) {
-                                        logkd("driver_filter ioctl data.ptr.buffer:\n");
+                                        logkd("driver_filter ioctl read data.ptr.buffer:\n");
                                         //print hex
-                                        print_hexdump(data_buf, data_size);
+                                        //print_hexdump(data_buf, data_size);
+                                        uint8_t ori_ustr[] = { 0x74, 0x00, 0x6F, 0x00, 0x70, 0x00, 0x6A, 0x00, 0x6F,
+                                                               0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75 };
+                                        uint8_t rep_ustr[] = { 0x75, 0x00, 0x70, 0x00, 0x71, 0x00, 0x6b, 0x00, 0x6F,
+                                                               0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75 };
+                                        uint8_t pad = 0x00;
+                                        if (bin_replace_all(data_buf, data_size, ori_ustr, sizeof(ori_ustr),
+                                                            rep_ustr, sizeof(rep_ustr), pad)) {
+                                            logkd("read buffer data replace success");
+                                            compat_copy_to_user((void *)buffer, data_buf, data_size);
+                                        }
                                     }
                                     get_krl_func()->vfree(data_buf);
                                 }
 
-                                logkd("driver_filter ioctl read buffer:\n");
+                                // logkd("driver_filter ioctl read buffer:\n");
+                                // print_hexdump(read_buf, k_bwr.read_consumed);
+                            } else {
+                                logkd("unknown read buffer cmd:0x%x", cmd);
                                 print_hexdump(read_buf, k_bwr.read_consumed);
-
                             }
-
-
-                        }
-
+                        } else
+                            logke("copy_from_user error read_buffer:0x%llx ,read_consumed:0x%llx", k_bwr.read_buffer,
+                                  k_bwr.read_consumed);
                         get_krl_func()->vfree(read_buf);
                     }
                 }

@@ -63,10 +63,6 @@ typedef struct binder_transaction_data_t
     } data;
 } binder_transaction_data;
 
-typedef struct parcel_binder_transaction_data_t
-{
-    int32_t cmd;
-    binder_transaction_data ta_data;
-} __packed parcel_binder_transaction_data; //__packed attribute to prevent structure padding issues
+
 
 #endif BINDER_DEF_H
