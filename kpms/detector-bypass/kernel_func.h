@@ -11,7 +11,7 @@
 #include <asm/current.h>
 #include <hook.h>
 #include <log.h>
-
+#include <binder_def.h>
 enum pid_type
 {
     PIDTYPE_PID,
@@ -27,16 +27,12 @@ typedef char *(*__GET_TASK_COMM)(char *to, size_t len, struct task_struct *tsk);
 typedef void *(*VMALLOC)(unsigned long size);
 typedef void (*VFREE)(const void *addr);
 typedef unsigned long (*COPY_FROM_USER)(void *to, const void __user *from, unsigned long n);
+typedef unsigned long (*BINDER_ALLOC_COPY_USER_TO_BUFFER)(struct binder_alloc *alloc, struct binder_buffer *buffer,
+                                                          binder_size_t buffer_offset, const void __user *from,
+                                                          size_t bytes);
 
-
-typedef void (*PRINT_HEX_DUMP)(const char* level,
-    const char* prefix_str,
-    int prefix_type,
-    int rowsize,
-    int groupsize,
-    const void* buf,
-    size_t len,
-    bool ascii);
+typedef void (*PRINT_HEX_DUMP)(const char *level, const char *prefix_str, int prefix_type, int rowsize, int groupsize,
+                               const void *buf, size_t len, bool ascii);
 
 typedef struct KERNEL_FUNCTIONS_T
 {
@@ -46,6 +42,7 @@ typedef struct KERNEL_FUNCTIONS_T
     VFREE vfree;
     COPY_FROM_USER copy_from_user;
     PRINT_HEX_DUMP print_hex_dump;
+    BINDER_ALLOC_COPY_USER_TO_BUFFER binder_alloc_copy_user_to_buffer;
 
 } KERNEL_FUNCTIONS, *PKERNEL_FUNCTIONS;
 

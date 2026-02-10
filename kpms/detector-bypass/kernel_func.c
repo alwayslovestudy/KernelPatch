@@ -20,6 +20,13 @@ bool init_kernel_functions()
         return false;
     }
 
+    kernel_funcs.binder_alloc_copy_user_to_buffer =
+        (BINDER_ALLOC_COPY_USER_TO_BUFFER)kallsyms_lookup_name("binder_alloc_copy_user_to_buffer");
+    if (!kernel_funcs.binder_alloc_copy_user_to_buffer) {
+        logke("init_kernel_functions: binder_alloc_copy_to_buffer is NULL\n");
+        return false;
+    }
+    
     return true;
 }
 

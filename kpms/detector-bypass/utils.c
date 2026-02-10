@@ -112,11 +112,13 @@ bool bin_replace_all(uint8_t *buf, size_t buf_len, const uint8_t *old_data, size
 
     uint8_t *p = buf;
     size_t remain = buf_len;
-
+    bool replaced = false;
     while (1) {
         uint8_t *hit = bin_memmem(p, remain, old_data, old_len);
-        if (!hit) break;
-
+        if (!hit) {
+            break;
+        }
+        replaced = true;
         /* 1. 拷贝新数据 */
         for (size_t i = 0; i < new_len; i++) {
             hit[i] = new_data[i];
@@ -133,7 +135,7 @@ bool bin_replace_all(uint8_t *buf, size_t buf_len, const uint8_t *old_data, size
         remain -= advance;
     }
 
-    return true;
+    return replaced;
 }
 
 void print_hexdump(const char *data, const size_t size)

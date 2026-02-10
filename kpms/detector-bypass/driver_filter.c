@@ -208,7 +208,7 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                                 logkd(
                                     "driver_filter ioctl read buffer  buffer:0x%llx data_size:0x%llx offsize:0x%llx offsets:0x%llx\n",
                                     buffer, data_size, offsize, offsets);
-                                char *data_buf = get_krl_func()->vmalloc(data_size);
+                                uint8_t *data_buf = get_krl_func()->vmalloc(data_size);
                                 if (data_buf) {
                                     memset(data_buf, 0, data_size);
                                     rc = get_krl_func()->copy_from_user(data_buf, (const void *)buffer, data_size);
@@ -217,14 +217,18 @@ static void callback_after_ioctl(hook_fargs4_t *args, void *udata)
                                         //print hex
                                         //print_hexdump(data_buf, data_size);
                                         uint8_t ori_ustr[] = { 0x74, 0x00, 0x6F, 0x00, 0x70, 0x00, 0x6A, 0x00, 0x6F,
-                                                               0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75 };
+                                                               0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
                                         uint8_t rep_ustr[] = { 0x75, 0x00, 0x70, 0x00, 0x71, 0x00, 0x6b, 0x00, 0x6F,
-                                                               0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75 };
+                                                               0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
                                         uint8_t pad = 0x00;
-                                        if (bin_replace_all(data_buf, data_size, ori_ustr, sizeof(ori_ustr),
-                                                            rep_ustr, sizeof(rep_ustr), pad)) {
+                                        if (bin_replace_all(data_buf, data_size, ori_ustr, sizeof(ori_ustr), rep_ustr,
+                                                            sizeof(rep_ustr), pad)) {
                                             logkd("read buffer data replace success");
-                                            compat_copy_to_user((void *)buffer, data_buf, data_size);
+                                            int cplen = compat_copy_to_user((void *)buffer, data_buf, data_size);
+                                            if (cplen == data_size)
+                                                logkd("cp_to_user success");
+                                            else
+                                                logke("cp_to_user failed cplen:0x%x", cplen);
                                         }
                                     }
                                     get_krl_func()->vfree(data_buf);

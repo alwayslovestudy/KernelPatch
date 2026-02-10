@@ -1,15 +1,12 @@
 #ifndef BINDER_DEF_H
 #define BINDER_DEF_H
 
-
 #define BINDER_WRITE_READ 3224396289
 
-
 #define BC_TRANSACTION 0x40406300
-#define BR_REPLY        0x80407203
-#define BR_NOOP      0x720c
+#define BR_REPLY 0x80407203
+#define BR_NOOP 0x720c
 #define BR_TRANSACTION_COMPLETE 0x7206
-
 
 typedef __u64 binder_size_t;
 typedef __u64 binder_uintptr_t;
@@ -63,6 +60,4 @@ typedef struct binder_transaction_data_t
     } data;
 } binder_transaction_data;
 
-
-
-#endif BINDER_DEF_H
+#endif

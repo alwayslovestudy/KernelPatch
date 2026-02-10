@@ -32,7 +32,6 @@ void after_add(hook_fargs2_t *args, void *udata)
     logkd("after add arg0: %d, arg1: %d, ret: %d\n", (int)args->arg0, (int)args->arg1, (int)args->ret);
     args->ret = 100;
 }
-
 static long inline_hook_demo_init(const char *args, const char *event, void *__user reserved)
 {
     logkd("kpm inline-hook-demo init\n");
