@@ -13,6 +13,9 @@
 #include <kernel_func.h>
 #include <file_filter.h>
 #include <driver_filter.h>
+#include <binder_def.h>
+#include <utils.h>
+#include <linux/pid.h>
 
 KPM_NAME("kpm-detector-bypass");
 KPM_VERSION("1.0.0");
@@ -28,13 +31,23 @@ void before_binder_alloc_copy_user_to_buffer(hook_fargs5_t *args, void *udata)
         memset(comm, 0, sizeof(comm));
         struct task_struct *task = current;
         kf->__get_task_comm(comm, sizeof(comm), task);
-        if (!strstr("com.app.bintertest", comm)) {
+        if (!strstr("system_server", comm)) {
             //logkd("not target process,current proc%s", comm);
             return;
         }
     }
     logkd("binder_alloc_copy_user_to_buffer from:0x%llx", args->arg3);
     logkd("binder_alloc_copy_user_to_buffer bytes:0x%llx", args->arg4);
+
+    struct binder_alloc *binder_alloc_ptr = (struct binder_alloc *)args->arg0;
+    logkd("binder alloc pid:%d", binder_alloc_ptr->pid);
+    struct task_struct *alloc_task = kf->pid_task(kf->find_vpid(binder_alloc_ptr->pid), PIDTYPE_PID);
+    if (alloc_task) {
+        char comm[16 + 1];
+        memset(comm, 0, sizeof(comm));
+        kf->__get_task_comm(comm, sizeof(comm), alloc_task);
+        logkd("binder alloc task comm:%s", comm);
+    }
 }
 
 void after_binder_alloc_copy_user_to_buffer(hook_fargs5_t *args, void *udata)
@@ -60,9 +73,9 @@ static long detector_bypass_init(const char *args, const char *event, void *__us
         logke("detector_bypass init_kernel_functions failed\n");
         return -1;
     }
-    driver_filter_init("com.app.bintertest");
-    driver_filter_add_rule("/dev/binder", " ", " ");
-    driver_filter_start();
+    // driver_filter_init("com.app.bintertest");
+    // driver_filter_add_rule("/dev/binder", " ", " ");
+    // driver_filter_start();
 
     // file_filter_init(".app.huntermini");
     // file_filter_add_rule("/proc/cpuinfo", "Hardware", "HHHHHHHH");

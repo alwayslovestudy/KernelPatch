@@ -26,6 +26,18 @@ bool init_kernel_functions()
         logke("init_kernel_functions: binder_alloc_copy_to_buffer is NULL\n");
         return false;
     }
+
+    kernel_funcs.pid_task = (PID_TASK)kallsyms_lookup_name("pid_task");
+    if (!kernel_funcs.pid_task) {
+        logke("init_kernel_functions: pid_task is NULL\n");
+        return false;
+    }
+
+    kernel_funcs.find_vpid = (FIND_VPID)kallsyms_lookup_name("find_vpid");
+    if (!kernel_funcs.find_vpid) {
+        logke("init_kernel_functions: find_vpid is NULL\n");
+        return false;
+    }
     
     return true;
 }

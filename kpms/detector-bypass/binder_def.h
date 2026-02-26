@@ -60,4 +60,11 @@ typedef struct binder_transaction_data_t
     } data;
 } binder_transaction_data;
 
+struct binder_alloc
+{
+    char data[0x74]; //针对android 10
+    int pid;
+    // ...
+};
+
 #endif

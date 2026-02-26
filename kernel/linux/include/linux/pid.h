@@ -4,14 +4,14 @@
 #include <ktypes.h>
 #include <ksyms.h>
 
-enum pid_type
-{
-    PIDTYPE_PID,
-    PIDTYPE_TGID,
-    PIDTYPE_PGID,
-    PIDTYPE_SID,
-    PIDTYPE_MAX,
-};
+// enum pid_type
+// {
+//     PIDTYPE_PID,
+//     PIDTYPE_TGID,
+//     PIDTYPE_PGID,
+//     PIDTYPE_SID,
+//     PIDTYPE_MAX,
+// };
 
 struct upid;
 struct pid;

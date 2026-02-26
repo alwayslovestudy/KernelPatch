@@ -34,6 +34,11 @@ typedef unsigned long (*BINDER_ALLOC_COPY_USER_TO_BUFFER)(struct binder_alloc *a
 typedef void (*PRINT_HEX_DUMP)(const char *level, const char *prefix_str, int prefix_type, int rowsize, int groupsize,
                                const void *buf, size_t len, bool ascii);
 
+struct pid;
+typedef struct task_struct *(*PID_TASK)(struct pid *pid, enum pid_type type);
+typedef struct pid *(*FIND_VPID)(int nr);
+
+
 typedef struct KERNEL_FUNCTIONS_T
 {
     __TASK_PID_NR_NS __task_pid_nr_ns;
@@ -43,6 +48,8 @@ typedef struct KERNEL_FUNCTIONS_T
     COPY_FROM_USER copy_from_user;
     PRINT_HEX_DUMP print_hex_dump;
     BINDER_ALLOC_COPY_USER_TO_BUFFER binder_alloc_copy_user_to_buffer;
+    PID_TASK pid_task;
+    FIND_VPID find_vpid;
 
 } KERNEL_FUNCTIONS, *PKERNEL_FUNCTIONS;
 
