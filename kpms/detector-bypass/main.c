@@ -13,9 +13,7 @@
 #include <kernel_func.h>
 #include <file_filter.h>
 #include <driver_filter.h>
-#include <binder_def.h>
-#include <utils.h>
-#include <linux/pid.h>
+#include <binder_filter.h>
 
 KPM_NAME("kpm-detector-bypass");
 KPM_VERSION("1.0.0");
@@ -23,48 +21,6 @@ KPM_LICENSE("GPL v2");
 KPM_AUTHOR("neo");
 KPM_DESCRIPTION("KernelPatch Module Detector Bypass");
 
-void before_binder_alloc_copy_user_to_buffer(hook_fargs5_t *args, void *udata)
-{
-    PKERNEL_FUNCTIONS kf = get_krl_func();
-    if (kf) {
-        char comm[16 + 1];
-        memset(comm, 0, sizeof(comm));
-        struct task_struct *task = current;
-        kf->__get_task_comm(comm, sizeof(comm), task);
-        if (!strstr("system_server", comm)) {
-            //logkd("not target process,current proc%s", comm);
-            return;
-        }
-    }
-    logkd("binder_alloc_copy_user_to_buffer from:0x%llx", args->arg3);
-    logkd("binder_alloc_copy_user_to_buffer bytes:0x%llx", args->arg4);
-
-    struct binder_alloc *binder_alloc_ptr = (struct binder_alloc *)args->arg0;
-    logkd("binder alloc pid:%d", binder_alloc_ptr->pid);
-    struct task_struct *alloc_task = kf->pid_task(kf->find_vpid(binder_alloc_ptr->pid), PIDTYPE_PID);
-    if (alloc_task) {
-        char comm[16 + 1];
-        memset(comm, 0, sizeof(comm));
-        kf->__get_task_comm(comm, sizeof(comm), alloc_task);
-        logkd("binder alloc task comm:%s", comm);
-    }
-}
-
-void after_binder_alloc_copy_user_to_buffer(hook_fargs5_t *args, void *udata)
-{
-}
-
-static void hook_binder_alloc_copy_user_to_buffer()
-{
-    hook_err_t err = hook_wrap5((void *)get_krl_func()->binder_alloc_copy_user_to_buffer,
-                                before_binder_alloc_copy_user_to_buffer, after_binder_alloc_copy_user_to_buffer, 0);
-    logkd("hook err: %d\n", err);
-}
-
-static void unhook_binder_alloc_copy_user_to_buffer()
-{
-    unhook(get_krl_func()->binder_alloc_copy_user_to_buffer);
-}
 
 static long detector_bypass_init(const char *args, const char *event, void *__user reserved)
 {
@@ -84,7 +40,15 @@ static long detector_bypass_init(const char *args, const char *event, void *__us
     // redirect_add_rule("/proc/cpuinfo", "/data/local/tmp/redirect_cpu.txt");
     // redirect_start();
 
-    hook_binder_alloc_copy_user_to_buffer();
+    uint8_t ori_ustr[] = { 0x74, 0x00, 0x6F, 0x00, 0x70, 0x00, 0x6A, 0x00, 0x6F,
+                                                        0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
+    uint8_t rep_ustr[] = { 0x75, 0x00, 0x70, 0x00, 0x71, 0x00, 0x6b, 0x00, 0x6F,
+                           0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
+
+    binder_filter_init("com.app.bintertest");
+    binder_filter_add_rule((const char*)ori_ustr, sizeof(ori_ustr), (const char*)rep_ustr, sizeof(rep_ustr));
+    binder_filter_start();
+
     return 0;
 }
 
@@ -97,9 +61,10 @@ static long detector_bypass_exit(void *__user reserved)
 {
     // redirect_stop();
     // file_filter_stop();
-    driver_filter_stop();
+    //driver_filter_stop();
+
+    binder_filter_stop();
     logkd("kpm-detector_bypass exit ...\n");
-    unhook_binder_alloc_copy_user_to_buffer();
     return 0;
 }
 
