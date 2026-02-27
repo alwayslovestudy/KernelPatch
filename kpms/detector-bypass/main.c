@@ -21,7 +21,6 @@ KPM_LICENSE("GPL v2");
 KPM_AUTHOR("neo");
 KPM_DESCRIPTION("KernelPatch Module Detector Bypass");
 
-
 static long detector_bypass_init(const char *args, const char *event, void *__user reserved)
 {
     logkd("detector_bypass init ..., args: %s\n", args);
@@ -41,12 +40,13 @@ static long detector_bypass_init(const char *args, const char *event, void *__us
     // redirect_start();
 
     uint8_t ori_ustr[] = { 0x74, 0x00, 0x6F, 0x00, 0x70, 0x00, 0x6A, 0x00, 0x6F,
-                                                        0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
+                           0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
     uint8_t rep_ustr[] = { 0x75, 0x00, 0x70, 0x00, 0x71, 0x00, 0x6b, 0x00, 0x6F,
                            0x00, 0x68, 0x00, 0x6E, 0x00, 0x77, 0x00, 0x75, 0x00 };
 
+    
     binder_filter_init("com.app.bintertest");
-    binder_filter_add_rule((const char*)ori_ustr, sizeof(ori_ustr), (const char*)rep_ustr, sizeof(rep_ustr));
+    binder_filter_add_rule((const char *)ori_ustr, sizeof(ori_ustr), (const char *)rep_ustr, sizeof(rep_ustr));
     binder_filter_start();
 
     return 0;
@@ -67,6 +67,7 @@ static long detector_bypass_exit(void *__user reserved)
     logkd("kpm-detector_bypass exit ...\n");
     return 0;
 }
+
 
 KPM_INIT(detector_bypass_init);
 KPM_CTL0(detector_bypass_control0);
