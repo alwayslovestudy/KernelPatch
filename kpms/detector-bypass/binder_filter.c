@@ -38,6 +38,8 @@ static FILTER_RULE_LIST filter_rules;
 
 static void before_binder_alloc_copy_user_to_buffer(hook_fargs5_t* args, void* udata)
 {
+
+    args->local.data0 = 0; //备份的buffer地址
     PKERNEL_FUNCTIONS kf = get_krl_func();
     // char cur_comm[16 + 1];
     // if (kf) {
@@ -61,7 +63,6 @@ static void before_binder_alloc_copy_user_to_buffer(hook_fargs5_t* args, void* u
             // logkd("not target process,current proc:%s", comm);
             return;
         }
-
         size_t buf_size = (size_t)args->arg4;
         const void __user* user_buf = (const void __user*)args->arg3;
         uint8_t* data_buf = get_krl_func()->vmalloc(buf_size);
@@ -69,34 +70,57 @@ static void before_binder_alloc_copy_user_to_buffer(hook_fargs5_t* args, void* u
             memset(data_buf, 0, buf_size);
             long rc = kf->copy_from_user(data_buf, user_buf, buf_size);
             if (rc == 0) {
+                //备份原始数据 
+               
                 for (int i = 0;i < filter_rules.count;i++) {
                     uint8_t pad = 0x00;
                     if (bin_replace_all(data_buf, buf_size, (const uint8_t*)filter_rules.rules[i].ori_data, filter_rules.rules[i].ori_len,
                         (const uint8_t*)filter_rules.rules[i].replace_data, filter_rules.rules[i].replace_len, pad)) {
                         logkd("kernel buffer data replaced");
+                        //备份原始数据
+                        uint8_t* back_buf = get_krl_func()->vmalloc(buf_size);
+                        if (back_buf) {
+                            memcpy(back_buf, data_buf, buf_size);
+                        }
                         int cplen = compat_copy_to_user((void*)user_buf, data_buf, buf_size);
                         if (cplen == buf_size)
+                        {
                             logkd("kernel data cp_to_user success");
+                            args->local.data0 = (uint64_t)back_buf; //保存备份的buffer地址
+                            args->local.data1 = (uint64_t)buf_size; //保存原始的buffer大小
+                            args->local.data2 = (uint64_t)user_buf; //保存原始的user_buf地址
+                        }
                         else
+                        {
                             logke("kernel data cp_to_user failed cplen:0x%x", cplen);
+                            if(back_buf) get_krl_func()->vfree(back_buf);
+                        }
                     }
 
-
-
                 }
+               
             }
+    
             get_krl_func()->vfree(data_buf);
         }
-
-
-
-
 
     }
 }
 
 static void after_binder_alloc_copy_user_to_buffer(hook_fargs5_t* args, void* udata)
 {
+    if(args->local.data0) {
+        uint8_t* back_buf = (uint8_t*)args->local.data0;
+        size_t buf_size = (size_t)args->local.data1;
+        const void __user* user_buf = (const void __user*)args->local.data2;
+        long rc = compat_copy_to_user((void*)user_buf, back_buf, buf_size);
+        if (rc == buf_size) 
+            logkd("original data cp_to_user success");
+        else
+            logke("original data cp_to_user failed rc: %ld", rc);
+        get_krl_func()->vfree(back_buf);
+    }
+
 
 }
 
