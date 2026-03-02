@@ -118,7 +118,8 @@ static void after_binder_alloc_copy_user_to_buffer(hook_fargs5_t* args, void* ud
             logkd("original data cp_to_user success");
         else
             logke("original data cp_to_user failed rc: %ld", rc);
-        get_krl_func()->vfree(back_buf);
+        if(back_buf)
+            get_krl_func()->vfree(back_buf);
     }
 
 
